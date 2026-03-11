@@ -1,0 +1,69 @@
+name: Build macOS App
+
+on:
+  push:
+    branches: [main, master]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pyinstaller
+
+      - name: Build app bundle
+        run: |
+          pyinstaller \
+            --name "WisperFlow Alternative" \
+            --windowed \
+            --noconfirm \
+            --add-data "wisperflow/assets:wisperflow/assets" \
+            --hidden-import rumps \
+            --hidden-import pynput \
+            --hidden-import pynput.keyboard \
+            --hidden-import pynput.keyboard._darwin \
+            --hidden-import pynput.mouse \
+            --hidden-import pynput.mouse._darwin \
+            --hidden-import whisper \
+            --hidden-import sounddevice \
+            --hidden-import webview \
+            --hidden-import torch \
+            --hidden-import numpy \
+            --collect-data whisper \
+            --collect-data torch \
+            --osx-bundle-identifier com.wisperflow.app \
+            wisperflow/__main__.py
+
+          /usr/libexec/PlistBuddy -c "Add :LSUIElement bool true" \
+            "dist/WisperFlow Alternative.app/Contents/Info.plist" 2>/dev/null || \
+          /usr/libexec/PlistBuddy -c "Set :LSUIElement true" \
+            "dist/WisperFlow Alternative.app/Contents/Info.plist"
+
+      - name: Create DMG installer
+        run: |
+          mkdir -p dist/dmg
+          cp -R "dist/WisperFlow Alternative.app" dist/dmg/
+          ln -s /Applications dist/dmg/Applications
+          hdiutil create \
+            -volname "WisperFlow Alternative" \
+            -srcfolder dist/dmg \
+            -ov -format UDZO \
+            dist/WisperFlow-Alternative-Installer.dmg
+          rm -rf dist/dmg
+
+      - name: Upload DMG
+        uses: actions/upload-artifact@v4
+        with:
+          name: WisperFlow-Alternative-Installer
+          path: dist/WisperFlow-Alternative-Installer.dmg
+          retention-days: 30

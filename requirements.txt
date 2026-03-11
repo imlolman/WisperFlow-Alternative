@@ -1,0 +1,11 @@
+openai-whisper
+torch
+numpy
+sounddevice
+scipy
+rumps
+pynput
+pyobjc-framework-Cocoa
+pyobjc-framework-Quartz
+pyobjc-framework-WebKit
+pywebview

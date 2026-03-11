@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+* { margin: 0; padding: 0 }
+html, body {
+  background: #000; overflow: hidden; height: 100%;
+  pointer-events: none;
+}
+
+.wrap {
+  display: flex; align-items: center; justify-content: center;
+  height: 100%; gap: 3px; padding: 0 14px; position: relative;
+}
+
+.bar {
+  width: 3px; border-radius: 1.5px;
+  background: rgba(255,255,255,0.85);
+  transition: height .07s ease-out;
+  height: 4px; min-height: 3px;
+}
+
+.cross {
+  position: absolute; right: 6px; top: 50%;
+  transform: translateY(-50%);
+  color: rgba(255,255,255,0.45); font-size: 10px;
+  font-family: -apple-system, sans-serif; font-weight: 400;
+  display: none; pointer-events: auto; cursor: pointer;
+  line-height: 1; padding: 2px;
+}
+.cross:hover { color: rgba(255,255,255,0.9) }
+
+#spinner {
+  display: none; position: absolute; top: 50%; left: 50%;
+  transform: translate(-50%,-50%); width: 18px; height: 18px;
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="bar"></div>
+  <div class="bar"></div>
+  <div class="bar"></div>
+  <div class="bar"></div>
+  <div class="bar"></div>
+  <div class="bar"></div>
+  <div class="cross" id="cross">&#x2715;</div>
+  <svg id="spinner" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+    <g>
+      <g transform="rotate(0 50 50)"><rect fill="#fff" height="12" width="6" ry="6" rx="3" y="24" x="47"><animate repeatCount="indefinite" begin="-0.917s" dur="1s" keyTimes="0;1" values="1;0" attributeName="opacity"/></rect></g>
+      <g transform="rotate(30 50 50)"><rect fill="#fff" height="12" width="6" ry="6" rx="3" y="24" x="47"><animate repeatCount="indefinite" begin="-0.833s" dur="1s" keyTimes="0;1" values="1;0" attributeName="opacity"/></rect></g>
+      <g transform="rotate(60 50 50)"><rect fill="#fff" height="12" width="6" ry="6" rx="3" y="24" x="47"><animate repeatCount="indefinite" begin="-0.75s" dur="1s" keyTimes="0;1" values="1;0" attributeName="opacity"/></rect></g>
+      <g transform="rotate(90 50 50)"><rect fill="#fff" height="12" width="6" ry="6" rx="3" y="24" x="47"><animate repeatCount="indefinite" begin="-0.667s" dur="1s" keyTimes="0;1" values="1;0" attributeName="opacity"/></rect></g>
+      <g transform="rotate(120 50 50)"><rect fill="#fff" height="12" width="6" ry="6" rx="3" y="24" x="47"><animate repeatCount="indefinite" begin="-0.583s" dur="1s" keyTimes="0;1" values="1;0" attributeName="opacity"/></rect></g>
+      <g transform="rotate(150 50 50)"><rect fill="#fff" height="12" width="6" ry="6" rx="3" y="24" x="47"><animate repeatCount="indefinite" begin="-0.5s" dur="1s" keyTimes="0;1" values="1;0" attributeName="opacity"/></rect></g>
+      <g transform="rotate(180 50 50)"><rect fill="#fff" height="12" width="6" ry="6" rx="3" y="24" x="47"><animate repeatCount="indefinite" begin="-0.417s" dur="1s" keyTimes="0;1" values="1;0" attributeName="opacity"/></rect></g>
+      <g transform="rotate(210 50 50)"><rect fill="#fff" height="12" width="6" ry="6" rx="3" y="24" x="47"><animate repeatCount="indefinite" begin="-0.333s" dur="1s" keyTimes="0;1" values="1;0" attributeName="opacity"/></rect></g>
+      <g transform="rotate(240 50 50)"><rect fill="#fff" height="12" width="6" ry="6" rx="3" y="24" x="47"><animate repeatCount="indefinite" begin="-0.25s" dur="1s" keyTimes="0;1" values="1;0" attributeName="opacity"/></rect></g>
+      <g transform="rotate(270 50 50)"><rect fill="#fff" height="12" width="6" ry="6" rx="3" y="24" x="47"><animate repeatCount="indefinite" begin="-0.167s" dur="1s" keyTimes="0;1" values="1;0" attributeName="opacity"/></rect></g>
+      <g transform="rotate(300 50 50)"><rect fill="#fff" height="12" width="6" ry="6" rx="3" y="24" x="47"><animate repeatCount="indefinite" begin="-0.083s" dur="1s" keyTimes="0;1" values="1;0" attributeName="opacity"/></rect></g>
+      <g transform="rotate(330 50 50)"><rect fill="#fff" height="12" width="6" ry="6" rx="3" y="24" x="47"><animate repeatCount="indefinite" begin="0s" dur="1s" keyTimes="0;1" values="1;0" attributeName="opacity"/></rect></g>
+    </g>
+  </svg>
+</div>
+<script>
+const bars = [...document.querySelectorAll('.bar')];
+const cross = document.getElementById('cross');
+const spinner = document.getElementById('spinner');
+
+cross.addEventListener('click', function() {
+  window.webkit.messageHandlers.wf.postMessage('cancel');
+});
+
+function setAmplitude(a) {
+  const h = [.35, .6, 1, 1, .6, .35];
+  bars.forEach((b, i) => {
+    b.style.height = Math.max(3, Math.min(20, a * h[i] * 26)) + 'px';
+  });
+}
+
+function showHold() {
+  bars.forEach(b => b.style.display = 'block');
+  cross.style.display = 'block';
+  spinner.style.display = 'none';
+}
+
+function showToggle() {
+  bars.forEach(b => b.style.display = 'block');
+  cross.style.display = 'block';
+  spinner.style.display = 'none';
+}
+
+function showProcessing() {
+  bars.forEach(b => b.style.display = 'none');
+  cross.style.display = 'none';
+  spinner.style.display = 'block';
+}
+</script>
+</body>
+</html>
