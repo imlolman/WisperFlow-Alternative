@@ -1,5 +1,6 @@
 """WisperFlow Alternative — main tray application."""
 
+import os
 import subprocess
 import sys
 import threading
@@ -110,9 +111,17 @@ class WFApp(rumps.App):
             except Exception:
                 pass
             return
-        self._settings_proc = subprocess.Popen(
-            [sys.executable, "-m", "wisperflow.ui"], cwd=str(_PROJECT_ROOT),
-        )
+        if getattr(sys, "frozen", False):
+            # Same executable, --settings opens the settings window only
+            self._settings_proc = subprocess.Popen(
+                [sys.executable, "--settings"],
+                cwd=os.path.expanduser("~"),
+                env=os.environ,
+            )
+        else:
+            self._settings_proc = subprocess.Popen(
+                [sys.executable, "-m", "wisperflow.ui"], cwd=str(_PROJECT_ROOT),
+            )
 
     # ── Config watcher ───────────────────────────────────────────────
 

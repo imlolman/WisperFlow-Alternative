@@ -27,7 +27,7 @@ jobs:
             --name "WisperFlow Alternative" \
             --windowed \
             --noconfirm \
-            --add-data "wisperflow/assets:wisperflow/assets" \
+            --add-data "wisperflow/assets:wf_assets" \
             --hidden-import rumps \
             --hidden-import pynput \
             --hidden-import pynput.keyboard \

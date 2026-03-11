@@ -14,7 +14,7 @@ pyinstaller \
     --name "$APP_NAME" \
     --windowed \
     --noconfirm \
-    --add-data "wisperflow/assets:wisperflow/assets" \
+    --add-data "wisperflow/assets:wf_assets" \
     --hidden-import rumps \
     --hidden-import pynput \
     --hidden-import pynput.keyboard \
@@ -26,6 +26,15 @@ pyinstaller \
     --hidden-import webview \
     --hidden-import torch \
     --hidden-import numpy \
+    --hidden-import wisperflow \
+    --hidden-import wisperflow.app \
+    --hidden-import wisperflow.ipc \
+    --hidden-import wisperflow.config \
+    --hidden-import wisperflow.clipboard \
+    --hidden-import wisperflow.overlay \
+    --hidden-import wisperflow.shortcuts \
+    --hidden-import wisperflow.transcriber \
+    --hidden-import wisperflow.ui \
     --collect-data whisper \
     --collect-data torch \
     --osx-bundle-identifier com.wisperflow.app \

@@ -329,9 +329,15 @@ async function cp(b,t){await api.copy_text(t);b.textContent='\u2713';setTimeout(
 window.addEventListener('pywebviewready',init);
 </script></body></html>"""
 
-if __name__ == "__main__":
+
+def run_settings():
+    """Entry point for in-process or --settings launch (used by frozen app)."""
     window = webview.create_window(
         "WisperFlow Alternative", html=HTML, js_api=Api(),
         width=380, height=500, resizable=False, background_color="#0c0c0c",
     )
     webview.start()
+
+
+if __name__ == "__main__":
+    run_settings()

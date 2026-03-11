@@ -1,5 +1,6 @@
 """Waveform overlay window (black pill at screen bottom)."""
 
+import sys
 import threading
 from pathlib import Path
 
@@ -8,7 +9,11 @@ from AppKit import NSBackingStoreBuffered, NSColor, NSPanel, NSScreen
 from Foundation import NSObject as _NSObject, NSURL
 from PyObjCTools import AppHelper
 
-OVERLAY_HTML_PATH = Path(__file__).resolve().parent / "assets" / "overlay.html"
+if getattr(sys, "frozen", False):
+    _base = Path(getattr(sys, "_MEIPASS", sys.executable)).resolve()
+    OVERLAY_HTML_PATH = _base / "wf_assets" / "overlay.html"
+else:
+    OVERLAY_HTML_PATH = Path(__file__).resolve().parent / "assets" / "overlay.html"
 
 
 class _JSBridge(_NSObject):
