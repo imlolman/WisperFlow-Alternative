@@ -1,27 +1,21 @@
-"""Clipboard copy and Cmd+V paste simulation."""
+"""Clipboard copy and paste simulation (cross-platform)."""
 
-import subprocess
+import sys
 import time
 
-from Quartz import (
-    CGEventCreateKeyboardEvent,
-    CGEventPost,
-    CGEventSetFlags,
-    kCGEventFlagMaskCommand,
-    kCGHIDEventTap,
-)
+import pyperclip
+from pynput.keyboard import Controller, Key
+
+_keyboard = Controller()
 
 
 def copy_to_clipboard(text: str):
-    subprocess.run(["pbcopy"], input=text.encode("utf-8"), check=True)
+    pyperclip.copy(text)
 
 
 def simulate_paste():
     time.sleep(0.05)
-    v_keycode = 0x09
-    down = CGEventCreateKeyboardEvent(None, v_keycode, True)
-    CGEventSetFlags(down, kCGEventFlagMaskCommand)
-    up = CGEventCreateKeyboardEvent(None, v_keycode, False)
-    CGEventSetFlags(up, kCGEventFlagMaskCommand)
-    CGEventPost(kCGHIDEventTap, down)
-    CGEventPost(kCGHIDEventTap, up)
+    paste_key = Key.cmd if sys.platform == "darwin" else Key.ctrl
+    with _keyboard.pressed(paste_key):
+        _keyboard.press("v")
+        _keyboard.release("v")

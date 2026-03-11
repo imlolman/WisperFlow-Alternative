@@ -2,8 +2,6 @@
 
 import socket
 
-from PyObjCTools import AppHelper
-
 from .config import TCP_PORT
 
 
@@ -17,7 +15,7 @@ def send_to_running_instance(cmd: str = "show_settings") -> bool:
         return False
 
 
-def start_command_server(app):
+def start_command_server(call_after, app):
     """Blocking loop — run in a daemon thread."""
     srv = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     srv.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
@@ -30,8 +28,8 @@ def start_command_server(app):
             data = conn.recv(1024).decode().strip()
             conn.close()
             if data == "show_settings":
-                AppHelper.callAfter(app.open_settings)
-                AppHelper.callAfter(app._show_tray_temporarily)
+                call_after(app.open_settings)
+                call_after(app._show_tray_temporarily)
         except socket.timeout:
             continue
         except Exception:

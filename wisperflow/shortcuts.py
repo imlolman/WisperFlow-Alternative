@@ -1,35 +1,7 @@
-"""Shortcut parsing and CGEvent-based input listeners with event suppression."""
+"""Cross-platform shortcut listening via pynput."""
 
-import threading
+from pynput import keyboard, mouse
 
-from pynput import keyboard
-from Quartz import (
-    CGEventGetIntegerValueField,
-    CGEventMaskBit,
-    CGEventTapCreate,
-    CGEventTapEnable,
-    CFMachPortCreateRunLoopSource,
-    CFRunLoopAddSource,
-    CFRunLoopGetCurrent,
-    CFRunLoopRun,
-    CFRunLoopStop,
-    kCFRunLoopCommonModes,
-    kCGEventFlagsChanged,
-    kCGEventKeyDown,
-    kCGEventKeyUp,
-    kCGEventLeftMouseDown,
-    kCGEventLeftMouseUp,
-    kCGEventOtherMouseDown,
-    kCGEventOtherMouseUp,
-    kCGEventRightMouseDown,
-    kCGEventRightMouseUp,
-    kCGHeadInsertEventTap,
-    kCGKeyboardEventKeycode,
-    kCGMouseEventButtonNumber,
-    kCGSessionEventTap,
-)
-
-# Maps config key names → pynput Key objects (used for vk extraction only)
 _KEYSYM_TO_PYNPUT_KEY = {
     "Alt_R": keyboard.Key.alt_r,
     "Alt_L": keyboard.Key.alt,
@@ -53,15 +25,17 @@ _KEYSYM_TO_PYNPUT_KEY = {
     **{f"F{i}": getattr(keyboard.Key, f"f{i}") for i in range(1, 21)},
 }
 
-CG_BTN_NAMES = {0: "left", 1: "right", 2: "middle", 3: "back", 4: "forward"}
+_PYNPUT_BTN_NAMES = {
+    mouse.Button.left: "left",
+    mouse.Button.right: "right",
+    mouse.Button.middle: "middle",
+    mouse.Button.x1: "back",
+    mouse.Button.x2: "forward",
+}
 
 
 def parse_shortcut(shortcut_str: str):
-    """Parse 'mouse:back' or 'key:Alt_R' into (kind, target).
-
-    For mouse shortcuts, target is the button name string.
-    For key shortcuts, target is a pynput Key/KeyCode object.
-    """
+    """Parse 'mouse:back' or 'key:Alt_R' into (kind, target)."""
     if not shortcut_str:
         return (None, None)
     if ":" not in shortcut_str:
@@ -76,140 +50,67 @@ def parse_shortcut(shortcut_str: str):
     return ("key", None)
 
 
-def vk_from_pynput(key) -> int | None:
-    """Extract macOS virtual key code from a pynput key object."""
-    if isinstance(key, keyboard.Key):
-        return key.value.vk
-    if isinstance(key, keyboard.KeyCode):
-        return key.vk
-    return None
-
-
-class RawMouseListener:
-    """CGEvent-based listener that distinguishes all mouse buttons and suppresses matched ones."""
-
-    def __init__(self, callback, suppress_buttons=frozenset(), on_tap_failed=None):
-        self._cb = callback
-        self._suppress = suppress_buttons
-        self._on_tap_failed = on_tap_failed
-        self._runloop = None
-
-    def start(self):
-        threading.Thread(target=self._run, daemon=True).start()
-
-    def stop(self):
-        rl = self._runloop
-        if rl is not None:
-            CFRunLoopStop(rl)
-            self._runloop = None
-
-    def _run(self):
-        press_types = frozenset((kCGEventLeftMouseDown, kCGEventRightMouseDown, kCGEventOtherMouseDown))
-        suppress = self._suppress
-        mask = 0
-        for e in (kCGEventLeftMouseDown, kCGEventLeftMouseUp,
-                  kCGEventRightMouseDown, kCGEventRightMouseUp,
-                  kCGEventOtherMouseDown, kCGEventOtherMouseUp):
-            mask |= CGEventMaskBit(e)
-
-        def cg_callback(proxy, etype, event, refcon):
-            try:
-                if etype in (kCGEventLeftMouseDown, kCGEventLeftMouseUp):
-                    name = "left"
-                elif etype in (kCGEventRightMouseDown, kCGEventRightMouseUp):
-                    name = "right"
-                else:
-                    btn_num = CGEventGetIntegerValueField(event, kCGMouseEventButtonNumber)
-                    name = CG_BTN_NAMES.get(btn_num, str(btn_num))
-                self._cb(name, etype in press_types)
-                if name in suppress:
-                    return None
-            except Exception:
-                pass
-            return event
-
-        tap = CGEventTapCreate(
-            kCGSessionEventTap, kCGHeadInsertEventTap,
-            0x00000000,  # kCGEventTapOptionDefault — can suppress events
-            mask, cg_callback, None,
-        )
-        if tap is None:
-            print("[wf] CGEventTap (mouse) failed — grant Accessibility permission")
-            if self._on_tap_failed:
-                self._on_tap_failed()
-            return
-
-        src = CFMachPortCreateRunLoopSource(None, tap, 0)
-        self._runloop = CFRunLoopGetCurrent()
-        CFRunLoopAddSource(self._runloop, src, kCFRunLoopCommonModes)
-        CGEventTapEnable(tap, True)
-        CFRunLoopRun()
+def keys_match(key, target) -> bool:
+    if key == target:
+        return True
+    if isinstance(key, keyboard.KeyCode) and isinstance(target, keyboard.KeyCode):
+        return bool(key.char and target.char and key.char == target.char)
+    return False
 
 
 class RawKeyboardListener:
-    """CGEvent-based keyboard listener that suppresses matched shortcut key events."""
-
     def __init__(self, on_press, on_release, suppress_vks=frozenset(), on_tap_failed=None):
         self._on_press = on_press
         self._on_release = on_release
-        self._suppress = suppress_vks
-        self._on_tap_failed = on_tap_failed
-        self._runloop = None
-        self._mod_pressed = set()
+        self._listener = None
 
     def start(self):
-        threading.Thread(target=self._run, daemon=True).start()
-
-    def stop(self):
-        rl = self._runloop
-        if rl is not None:
-            CFRunLoopStop(rl)
-            self._runloop = None
-
-    def _run(self):
-        suppress = self._suppress
-        mod_pressed = self._mod_pressed
-        mask = (CGEventMaskBit(kCGEventKeyDown) |
-                CGEventMaskBit(kCGEventKeyUp) |
-                CGEventMaskBit(kCGEventFlagsChanged))
-
-        def cg_callback(proxy, etype, event, refcon):
+        def _press(key):
             try:
-                vk = CGEventGetIntegerValueField(event, kCGKeyboardEventKeycode)
-                if etype == kCGEventKeyDown:
-                    self._on_press(vk)
-                    if vk in suppress:
-                        return None
-                elif etype == kCGEventKeyUp:
-                    self._on_release(vk)
-                    if vk in suppress:
-                        return None
-                elif etype == kCGEventFlagsChanged:
-                    if vk in mod_pressed:
-                        mod_pressed.discard(vk)
-                        self._on_release(vk)
-                    else:
-                        mod_pressed.add(vk)
-                        self._on_press(vk)
-                    if vk in suppress:
-                        return None
+                self._on_press(key)
             except Exception:
                 pass
-            return event
 
-        tap = CGEventTapCreate(
-            kCGSessionEventTap, kCGHeadInsertEventTap,
-            0x00000000,  # kCGEventTapOptionDefault — can suppress events
-            mask, cg_callback, None,
-        )
-        if tap is None:
-            print("[wf] CGEventTap (keyboard) failed — grant Accessibility permission")
-            if self._on_tap_failed:
-                self._on_tap_failed()
-            return
+        def _release(key):
+            try:
+                self._on_release(key)
+            except Exception:
+                pass
 
-        src = CFMachPortCreateRunLoopSource(None, tap, 0)
-        self._runloop = CFRunLoopGetCurrent()
-        CFRunLoopAddSource(self._runloop, src, kCFRunLoopCommonModes)
-        CGEventTapEnable(tap, True)
-        CFRunLoopRun()
+        self._listener = keyboard.Listener(on_press=_press, on_release=_release)
+        self._listener.daemon = True
+        self._listener.start()
+
+    def stop(self):
+        if self._listener:
+            try:
+                self._listener.stop()
+            except Exception:
+                pass
+            self._listener = None
+
+
+class RawMouseListener:
+    def __init__(self, callback, suppress_buttons=frozenset(), on_tap_failed=None):
+        self._cb = callback
+        self._listener = None
+
+    def start(self):
+        def _click(x, y, button, pressed):
+            try:
+                name = _PYNPUT_BTN_NAMES.get(button, str(button))
+                self._cb(name, pressed)
+            except Exception:
+                pass
+
+        self._listener = mouse.Listener(on_click=_click)
+        self._listener.daemon = True
+        self._listener.start()
+
+    def stop(self):
+        if self._listener:
+            try:
+                self._listener.stop()
+            except Exception:
+                pass
+            self._listener = None

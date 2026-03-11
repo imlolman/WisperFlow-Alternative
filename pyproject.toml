@@ -14,12 +14,11 @@ dependencies = [
     "numpy",
     "sounddevice",
     "scipy",
-    "rumps",
     "pynput",
-    "pyobjc-framework-Cocoa",
-    "pyobjc-framework-Quartz",
-    "pyobjc-framework-WebKit",
     "pywebview",
+    "pystray",
+    "Pillow",
+    "pyperclip",
 ]
 
 [project.scripts]
