@@ -5,8 +5,8 @@ import threading
 from pathlib import Path
 
 import WebKit
-from AppKit import NSBackingStoreBuffered, NSColor, NSPanel, NSScreen
-from Foundation import NSObject as _NSObject, NSURL
+from AppKit import NSBackingStoreBuffered, NSColor, NSEvent, NSPanel, NSScreen
+from Foundation import NSObject as _NSObject, NSPointInRect, NSURL
 from PyObjCTools import AppHelper
 
 if getattr(sys, "frozen", False):
@@ -85,12 +85,26 @@ class OverlayWindow:
         if self._ready:
             self.webview.evaluateJavaScript_completionHandler_(code, None)
 
+    def _reposition(self):
+        mouse = NSEvent.mouseLocation()
+        target = NSScreen.mainScreen()
+        for screen in NSScreen.screens():
+            if NSPointInRect(mouse, screen.frame()):
+                target = screen
+                break
+        visible = target.visibleFrame()
+        x = visible.origin.x + (visible.size.width - self.WIDTH) / 2
+        y = visible.origin.y + 8
+        self.window.setFrame_display_(((x, y), (self.WIDTH, self.HEIGHT)), True)
+
     def show_hold(self):
+        self._reposition()
         self.window.setIgnoresMouseEvents_(False)
         self.window.orderFront_(None)
         self._js("showHold()")
 
     def show_toggle(self):
+        self._reposition()
         self.window.setIgnoresMouseEvents_(False)
         self.window.orderFront_(None)
         self._js("showToggle()")

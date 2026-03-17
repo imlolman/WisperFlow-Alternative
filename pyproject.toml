@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "wisperflow"
-version = "0.1.0"
+dynamic = ["version"]
 description = "Voice-to-text macOS app powered by OpenAI Whisper. Hold or toggle a shortcut to record, transcribe, and auto-paste."
 requires-python = ">=3.10"
 license = {text = "MIT"}
@@ -24,6 +24,9 @@ dependencies = [
 
 [project.scripts]
 wisperflow = "wisperflow.__main__:main"
+
+[tool.setuptools.dynamic]
+version = {file = "VERSION"}
 
 [tool.setuptools.packages.find]
 include = ["wisperflow*"]

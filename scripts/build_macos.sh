@@ -35,6 +35,7 @@ pyinstaller \
     --hidden-import wisperflow.shortcuts \
     --hidden-import wisperflow.transcriber \
     --hidden-import wisperflow.ui \
+    --hidden-import wisperflow.onboarding \
     --collect-data whisper \
     --collect-data torch \
     --osx-bundle-identifier com.wisperflow.app \
@@ -46,6 +47,24 @@ PLIST="dist/${APP_NAME}.app/Contents/Info.plist"
 /usr/libexec/PlistBuddy -c "Set :LSUIElement true" "$PLIST"
 /usr/libexec/PlistBuddy -c "Add :NSMicrophoneUsageDescription string 'WisperFlow Alternative needs microphone access to transcribe speech.'" "$PLIST" 2>/dev/null || \
 /usr/libexec/PlistBuddy -c "Set :NSMicrophoneUsageDescription 'WisperFlow Alternative needs microphone access to transcribe speech.'" "$PLIST"
+
+# Create entitlements file for mic access
+ENTITLEMENTS="dist/entitlements.plist"
+cat > "$ENTITLEMENTS" <<ENTEOF
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>com.apple.security.device.audio-input</key>
+    <true/>
+</dict>
+</plist>
+ENTEOF
+
+# Re-sign the app so the patched Info.plist is sealed into the signature
+echo "==> Re-signing app bundle..."
+codesign --force --deep --sign - --entitlements "$ENTITLEMENTS" "dist/${APP_NAME}.app"
+rm -f "$ENTITLEMENTS"
 
 echo "==> Creating DMG installer..."
 

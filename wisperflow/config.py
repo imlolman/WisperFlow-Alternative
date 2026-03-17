@@ -14,6 +14,8 @@ DEFAULT_CONFIG = {
     "shortcut_toggle": "key:Alt_R",
     "hide_tray": False,
     "start_on_login": False,
+    "mic_device": None,
+    "setup_complete": False,
 }
 
 

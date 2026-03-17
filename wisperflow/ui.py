@@ -7,6 +7,7 @@ import sys
 import threading
 from pathlib import Path
 
+import sounddevice as sd
 import webview
 
 from .config import CONFIG_PATH, HISTORY_PATH, DEFAULT_CONFIG
@@ -85,6 +86,26 @@ class Api:
         c["_hold_display"] = _dn(c["shortcut_hold"])
         c["_toggle_display"] = _dn(c["shortcut_toggle"])
         return c
+
+    def get_microphones(self):
+        devices = sd.query_devices()
+        mics = []
+        cfg = _load()
+        selected = cfg.get("mic_device")
+        for i, d in enumerate(devices):
+            if d["max_input_channels"] > 0:
+                mics.append({
+                    "index": i, "name": d["name"],
+                    "is_default": i == sd.default.device[0],
+                    "is_selected": (selected == i) if selected is not None else (i == sd.default.device[0]),
+                })
+        return mics
+
+    def save_mic(self, device_index):
+        c = _load()
+        c["mic_device"] = int(device_index) if device_index is not None else None
+        _save(c)
+        return True
 
     def save_shortcut(self, field, value):
         c = _load()
@@ -220,6 +241,17 @@ h1{font-size:18px;font-weight:700;letter-spacing:-.3px;margin-bottom:22px;color:
 <h1>WisperFlow Alternative</h1>
 
 <div class="section">
+  <div class="stitle">Microphone</div>
+  <div class="card">
+    <select id="micSel" onchange="saveMic()" style="width:100%;background:#1a1a1a;color:var(--text);
+      border:1px solid #2a2a2a;border-radius:8px;padding:6px 10px;font-size:11px;
+      font-family:inherit;cursor:pointer;-webkit-appearance:none;appearance:none">
+      <option value="">Loading...</option>
+    </select>
+  </div>
+</div>
+
+<div class="section">
   <div class="stitle">Hold Shortcut</div>
   <div class="card">
     <div class="lbl">Press &amp; hold to record, release to transcribe</div>
@@ -277,7 +309,23 @@ async function init(){
   document.getElementById('toggleDisp').textContent=c._toggle_display;
   document.getElementById('hideTray').checked=c.hide_tray;
   document.getElementById('startLogin').checked=c.start_on_login;
+  loadMics();
   loadH();
+}
+async function loadMics(){
+  const mics=await api.get_microphones();
+  const sel=document.getElementById('micSel');
+  sel.innerHTML='';
+  mics.forEach(m=>{
+    const o=document.createElement('option');
+    o.value=m.index;o.textContent=m.name+(m.is_default?' (Default)':'');
+    if(m.is_selected)o.selected=true;
+    sel.appendChild(o);
+  });
+}
+function saveMic(){
+  const v=document.getElementById('micSel').value;
+  api.save_mic(v===''?null:parseInt(v));
 }
 
 function capture(which){

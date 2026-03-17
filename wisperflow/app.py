@@ -50,7 +50,7 @@ class WFApp(rumps.App):
         self.device: str | None = None
         self._key_listener = None
         self._mouse_listener = None
-        self._last_hold_end: float = 0.0
+        self._hold_active: bool = False
         self._config_mtime: float = 0
         self._settings_proc: subprocess.Popen | None = None
         self._tray_hide_timer: threading.Timer | None = None
@@ -144,6 +144,9 @@ class WFApp(rumps.App):
                             self._restart_listeners()
                             print(f"[wf] Shortcuts: hold={new['shortcut_hold']}  toggle={new['shortcut_toggle']}")
 
+                        if new.get("mic_device") != old.get("mic_device"):
+                            print(f"[wf] Mic device changed to {new.get('mic_device')}")
+
                         old_hide = old.get("hide_tray", False)
                         new_hide = new.get("hide_tray", False)
                         if old_hide != new_hide:
@@ -196,22 +199,17 @@ class WFApp(rumps.App):
         has_mouse_toggle = toggle_kind == "mouse" and toggle_target is not None
 
         def hold_press():
-            if self.whisper_model is None:
+            if self.whisper_model is None or self.is_processing:
                 return
-            if self.is_recording and self._recording_mode == "toggle":
-                self._stop_recording()
-                return
-            if self.is_recording or self.is_processing:
-                return
-            if time.time() - self._last_hold_end < 1.0:
-                self._start_recording("toggle")
-            else:
+            if not self.is_recording and not self._hold_active:
+                self._hold_active = True
                 self._start_recording("hold")
 
         def hold_release():
-            if self.is_recording and self._recording_mode == "hold":
-                self._last_hold_end = time.time()
-                self._stop_recording()
+            if self._hold_active:
+                self._hold_active = False
+                if self.is_recording and self._recording_mode == "hold":
+                    self._stop_recording()
 
         def toggle_press():
             if self.whisper_model is None:
@@ -280,8 +278,10 @@ class WFApp(rumps.App):
             self.audio_buffer.append(indata.copy())
             self._latest_rms = float(np.sqrt(np.mean(indata ** 2)))
 
+        mic_dev = self.config.get("mic_device")
         self.stream = sd.InputStream(
-            samplerate=SAMPLE_RATE, channels=1, dtype="float32", callback=_audio_cb
+            samplerate=SAMPLE_RATE, channels=1, dtype="float32",
+            device=mic_dev, callback=_audio_cb,
         )
         self.stream.start()
         AppHelper.callAfter(lambda: self._ui_show_recording(mode))
