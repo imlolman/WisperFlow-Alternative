@@ -11,7 +11,7 @@ import rumps
 import sounddevice as sd
 from PyObjCTools import AppHelper
 
-from .clipboard import copy_to_clipboard, simulate_paste
+from .clipboard import type_text
 from .config import CONFIG_PATH, SAMPLE_RATE, load_config, append_history
 from .ipc import start_command_server
 from .overlay import OverlayWindow
@@ -328,9 +328,7 @@ class WFApp(rumps.App):
                 return
             print(f"[wf] {time.time() - t0:.1f}s  ->  {text}")
             append_history(text, rec_duration)
-            copy_to_clipboard(text)
-            time.sleep(0.05)
-            simulate_paste()
+            type_text(text)
         except Exception as exc:
             print(f"[wf] Error: {exc}")
         finally:

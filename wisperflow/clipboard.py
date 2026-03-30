@@ -1,27 +1,26 @@
-"""Clipboard copy and Cmd+V paste simulation."""
+"""Type text directly via CGEvent unicode injection (no clipboard)."""
 
-import subprocess
 import time
 
 from Quartz import (
     CGEventCreateKeyboardEvent,
+    CGEventKeyboardSetUnicodeString,
     CGEventPost,
-    CGEventSetFlags,
-    kCGEventFlagMaskCommand,
     kCGHIDEventTap,
 )
 
-
-def copy_to_clipboard(text: str):
-    subprocess.run(["pbcopy"], input=text.encode("utf-8"), check=True)
+_INTER_CHAR_DELAY = 0.0
 
 
-def simulate_paste():
+def type_text(text: str):
+    """Inject text as synthetic key events without touching the clipboard."""
     time.sleep(0.05)
-    v_keycode = 0x09
-    down = CGEventCreateKeyboardEvent(None, v_keycode, True)
-    CGEventSetFlags(down, kCGEventFlagMaskCommand)
-    up = CGEventCreateKeyboardEvent(None, v_keycode, False)
-    CGEventSetFlags(up, kCGEventFlagMaskCommand)
-    CGEventPost(kCGHIDEventTap, down)
-    CGEventPost(kCGHIDEventTap, up)
+    for char in text:
+        down = CGEventCreateKeyboardEvent(None, 0, True)
+        CGEventKeyboardSetUnicodeString(down, 1, char)
+        CGEventPost(kCGHIDEventTap, down)
+        up = CGEventCreateKeyboardEvent(None, 0, False)
+        CGEventKeyboardSetUnicodeString(up, 1, char)
+        CGEventPost(kCGHIDEventTap, up)
+        if _INTER_CHAR_DELAY:
+            time.sleep(_INTER_CHAR_DELAY)
