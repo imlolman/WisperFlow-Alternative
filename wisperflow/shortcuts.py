@@ -27,6 +27,8 @@ from Quartz import (
     kCGKeyboardEventKeycode,
     kCGMouseEventButtonNumber,
     kCGSessionEventTap,
+    kCGEventTapDisabledByTimeout,
+    kCGEventTapDisabledByUserInput,
 )
 
 # Maps config key names → pynput Key objects (used for vk extraction only)
@@ -112,8 +114,14 @@ class RawMouseListener:
                   kCGEventOtherMouseDown, kCGEventOtherMouseUp):
             mask |= CGEventMaskBit(e)
 
+        tap_holder = [None]
+
         def cg_callback(proxy, etype, event, refcon):
             try:
+                if etype in (kCGEventTapDisabledByTimeout, kCGEventTapDisabledByUserInput):
+                    if tap_holder[0] is not None:
+                        CGEventTapEnable(tap_holder[0], True)
+                    return event
                 if etype in (kCGEventLeftMouseDown, kCGEventLeftMouseUp):
                     name = "left"
                 elif etype in (kCGEventRightMouseDown, kCGEventRightMouseUp):
@@ -139,6 +147,7 @@ class RawMouseListener:
                 self._on_tap_failed()
             return
 
+        tap_holder[0] = tap
         src = CFMachPortCreateRunLoopSource(None, tap, 0)
         self._runloop = CFRunLoopGetCurrent()
         CFRunLoopAddSource(self._runloop, src, kCFRunLoopCommonModes)
@@ -173,8 +182,14 @@ class RawKeyboardListener:
                 CGEventMaskBit(kCGEventKeyUp) |
                 CGEventMaskBit(kCGEventFlagsChanged))
 
+        tap_holder = [None]
+
         def cg_callback(proxy, etype, event, refcon):
             try:
+                if etype in (kCGEventTapDisabledByTimeout, kCGEventTapDisabledByUserInput):
+                    if tap_holder[0] is not None:
+                        CGEventTapEnable(tap_holder[0], True)
+                    return event
                 vk = CGEventGetIntegerValueField(event, kCGKeyboardEventKeycode)
                 if etype == kCGEventKeyDown:
                     self._on_press(vk)
@@ -208,6 +223,7 @@ class RawKeyboardListener:
                 self._on_tap_failed()
             return
 
+        tap_holder[0] = tap
         src = CFMachPortCreateRunLoopSource(None, tap, 0)
         self._runloop = CFRunLoopGetCurrent()
         CFRunLoopAddSource(self._runloop, src, kCFRunLoopCommonModes)
