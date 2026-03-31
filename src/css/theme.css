@@ -120,6 +120,7 @@ input[type="checkbox"] {
 .hlist {
   max-height: 180px;
   overflow-y: auto;
+  overscroll-behavior: contain;
   scrollbar-width: thin;
   scrollbar-color: #333 transparent;
 }

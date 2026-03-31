@@ -53,15 +53,13 @@ impl AppState {
     }
 }
 
-pub async fn load_model_bg(state: AppState, app: tauri::AppHandle) {
+pub async fn load_model_bg(state: AppState, _app: tauri::AppHandle) {
     let path = config::model_path();
     if !path.exists() {
         log::info!("Model not found at {:?}, skipping load", path);
         return;
     }
     log::info!("Loading whisper model...");
-    tray::set_title(&app, "\u{23f3}"); // ⏳
-
     let path_str = path.to_string_lossy().to_string();
     let result =
         tauri::async_runtime::spawn_blocking(move || transcriber::Transcriber::load(&path_str))
@@ -71,15 +69,12 @@ pub async fn load_model_bg(state: AppState, app: tauri::AppHandle) {
         Ok(Ok(t)) => {
             *state.transcriber.write() = Some(t);
             state.model_loaded.store(true, Ordering::SeqCst);
-            tray::set_title(&app, "\u{1d5ea}");
         }
         Ok(Err(e)) => {
             eprintln!("[wisperflow] Failed to load model: {}", e);
-            tray::set_title(&app, "!");
         }
         Err(e) => {
             eprintln!("[wisperflow] Model load task panicked: {}", e);
-            tray::set_title(&app, "!");
         }
     }
 }
@@ -162,7 +157,6 @@ fn start_recording(state: &AppState, app: &tauri::AppHandle, mode: &str) {
     }
 
     overlay::show(app, mode);
-    tray::set_title(app, "\u{25c9}"); // ◉
 
     // Amplitude timer
     let st = state.clone();
@@ -187,13 +181,11 @@ fn stop_recording(state: &AppState, app: &tauri::AppHandle) {
     let duration = audio.len() as f64 / config::SAMPLE_RATE as f64;
     if duration < 0.3 {
         overlay::hide(app);
-        tray::set_title(app, "\u{1d5ea}");
         return;
     }
 
     state.is_processing.store(true, Ordering::SeqCst);
     overlay::show_processing(app);
-    tray::set_title(app, "\u{23f3}");
 
     let st = state.clone();
     let app_clone = app.clone();
@@ -222,7 +214,6 @@ fn stop_recording(state: &AppState, app: &tauri::AppHandle) {
 
         st.is_processing.store(false, Ordering::SeqCst);
         overlay::hide(&app_clone);
-        tray::set_title(&app_clone, "\u{1d5ea}");
     });
 }
 
@@ -237,7 +228,6 @@ pub fn run() {
             app.manage(state.clone());
 
             tray::setup(app)?;
-            tray::set_title(app.handle(), "\u{23f3}"); // ⏳
 
             // Apply dock icon setting
             #[cfg(target_os = "macos")]

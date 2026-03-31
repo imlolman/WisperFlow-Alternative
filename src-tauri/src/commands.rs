@@ -198,7 +198,6 @@ pub fn cancel_recording(app: AppHandle, state: tauri::State<'_, AppState>) -> Re
         state.is_recording.store(false, std::sync::atomic::Ordering::SeqCst);
         state.recorder.lock().stop();
         overlay::hide(&app);
-        tray::set_title(&app, "\u{1d5ea}");
     }
     Ok(())
 }

@@ -1,4 +1,5 @@
 use tauri::{
+    image::Image,
     menu::{Menu, MenuItem},
     tray::TrayIconBuilder,
     AppHandle,
@@ -9,8 +10,10 @@ pub fn setup(app: &tauri::App) -> anyhow::Result<()> {
     let quit_item = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
     let menu = Menu::with_items(app, &[&settings_item, &quit_item])?;
 
+    let icon = Image::from_bytes(include_bytes!("../icons/tray-icon.png"))?;
+
     TrayIconBuilder::with_id("main")
-        .title("\u{2328}")
+        .icon(icon)
         .tooltip("WhisperFlow Alternative")
         .menu(&menu)
         .on_menu_event(move |app, event| match event.id().as_ref() {
@@ -25,12 +28,6 @@ pub fn setup(app: &tauri::App) -> anyhow::Result<()> {
         .build(app)?;
 
     Ok(())
-}
-
-pub fn set_title(app: &AppHandle, title: &str) {
-    if let Some(tray) = app.tray_by_id("main") {
-        tray.set_title(Some(title)).ok();
-    }
 }
 
 pub fn set_visible(app: &AppHandle, visible: bool) {
