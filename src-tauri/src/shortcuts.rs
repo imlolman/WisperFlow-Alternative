@@ -680,7 +680,14 @@ mod cg_raw {
     pub const K_CG_EVENT_OTHER_MOUSE_UP: u32 = 26;
 
     pub const K_CG_KEYBOARD_EVENT_KEYCODE: u32 = 9;
-    pub const K_CG_MOUSE_EVENT_BUTTON_NUMBER: u32 = 87;
+    pub const K_CG_MOUSE_EVENT_BUTTON_NUMBER: u32 = 3;
+
+    pub const FLAG_SHIFT: u64 = 0x00020000;
+    pub const FLAG_CONTROL: u64 = 0x00040000;
+    pub const FLAG_OPTION: u64 = 0x00080000;
+    pub const FLAG_COMMAND: u64 = 0x00100000;
+
+    pub const CG_EVENT_TAP_DISABLED_BY_TIMEOUT: u32 = 0xFFFFFFFE;
 
     pub fn event_mask(types: &[u32]) -> u64 {
         types.iter().fold(0u64, |mask, &t| mask | (1u64 << t))
@@ -700,6 +707,8 @@ mod cg_raw {
         pub fn CGEventTapEnable(tap: CFMachPortRef, enable: bool);
 
         pub fn CGEventGetIntegerValueField(event: CGEventRef, field: u32) -> i64;
+
+        pub fn CGEventGetFlags(event: CGEventRef) -> u64;
     }
 
     #[link(name = "CoreFoundation", kind = "framework")]
@@ -727,13 +736,44 @@ mod cg_raw {
 }
 
 #[cfg(target_os = "macos")]
+fn modifier_flag_for_keycode(code: &KeyCode) -> u64 {
+    match code {
+        KeyCode::ShiftLeft | KeyCode::ShiftRight => cg_raw::FLAG_SHIFT,
+        KeyCode::ControlLeft | KeyCode::ControlRight => cg_raw::FLAG_CONTROL,
+        KeyCode::Alt | KeyCode::AltGr => cg_raw::FLAG_OPTION,
+        KeyCode::MetaLeft | KeyCode::MetaRight => cg_raw::FLAG_COMMAND,
+        _ => 0,
+    }
+}
+
+#[cfg(target_os = "macos")]
 struct TapContext {
     handle: GrabHandle,
     state: parking_lot::Mutex<GrabState>,
+    tap_port: std::sync::atomic::AtomicUsize,
 }
 
 #[cfg(target_os = "macos")]
 unsafe extern "C" fn macos_tap_callback(
+    _proxy: cg_raw::CGEventTapProxy,
+    event_type: u32,
+    event: cg_raw::CGEventRef,
+    user_info: *mut std::ffi::c_void,
+) -> cg_raw::CGEventRef {
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        macos_tap_callback_inner(_proxy, event_type, event, user_info)
+    }));
+    match result {
+        Ok(ev) => ev,
+        Err(_) => {
+            eprintln!("[shortcuts] PANIC in tap_callback, returning event as-is");
+            event
+        }
+    }
+}
+
+#[cfg(target_os = "macos")]
+unsafe fn macos_tap_callback_inner(
     _proxy: cg_raw::CGEventTapProxy,
     event_type: u32,
     event: cg_raw::CGEventRef,
@@ -745,7 +785,16 @@ unsafe extern "C" fn macos_tap_callback(
         return event;
     }
 
-    // Tap-disabled notification (event_type ~0u32 on some macOS versions)
+    if event_type == CG_EVENT_TAP_DISABLED_BY_TIMEOUT {
+        eprintln!("[shortcuts] tap disabled by timeout, re-enabling");
+        let ctx = &*(user_info as *const TapContext);
+        let tap = ctx.tap_port.load(Ordering::SeqCst) as CFMachPortRef;
+        if !tap.is_null() {
+            CGEventTapEnable(tap, true);
+        }
+        return event;
+    }
+
     if event_type > 100 {
         return event;
     }
@@ -753,7 +802,6 @@ unsafe extern "C" fn macos_tap_callback(
     let ctx = &*(user_info as *const TapContext);
     let mut guard = ctx.state.lock();
 
-    // --- capture mode (mouse-only, for settings UI) ---
     if ctx.handle.capture_mode.load(Ordering::SeqCst) {
         match event_type {
             K_CG_EVENT_LEFT_MOUSE_DOWN
@@ -774,7 +822,6 @@ unsafe extern "C" fn macos_tap_callback(
         return event;
     }
 
-    // --- shortcuts disabled ---
     if !ctx.handle.enabled.load(Ordering::SeqCst) {
         match event_type {
             K_CG_EVENT_KEY_UP => {
@@ -795,13 +842,14 @@ unsafe extern "C" fn macos_tap_callback(
     }
 
     let config = ctx.handle.config.read().clone();
+    let flags = CGEventGetFlags(event);
 
     match event_type {
         K_CG_EVENT_KEY_DOWN => {
             let kc = CGEventGetIntegerValueField(event, K_CG_KEYBOARD_EVENT_KEYCODE);
             if let Some(key) = key_from_cg_keycode(kc) {
                 if !guard.pressed.insert(key) {
-                    return event; // auto-repeat
+                    return event;
                 }
                 if guard.process_key_press(&config, key) {
                     return std::ptr::null_mut();
@@ -822,15 +870,21 @@ unsafe extern "C" fn macos_tap_callback(
         K_CG_EVENT_FLAGS_CHANGED => {
             let kc = CGEventGetIntegerValueField(event, K_CG_KEYBOARD_EVENT_KEYCODE);
             if let Some(key) = key_from_cg_keycode(kc) {
-                if guard.pressed.contains(&key) {
-                    guard.pressed.remove(&key);
-                    if guard.process_key_release(&config, key) {
-                        return std::ptr::null_mut();
-                    }
-                } else {
-                    guard.pressed.insert(key);
-                    if guard.process_key_press(&config, key) {
-                        return std::ptr::null_mut();
+                if is_modifier(&key) {
+                    let flag = modifier_flag_for_keycode(&key);
+                    let flag_set = flag != 0 && (flags & flag) != 0;
+                    let in_pressed = guard.pressed.contains(&key);
+
+                    if flag_set && !in_pressed {
+                        guard.pressed.insert(key);
+                        if guard.process_key_press(&config, key) {
+                            return std::ptr::null_mut();
+                        }
+                    } else if !flag_set && in_pressed {
+                        guard.pressed.remove(&key);
+                        if guard.process_key_release(&config, key) {
+                            return std::ptr::null_mut();
+                        }
                     }
                 }
             }
@@ -878,8 +932,9 @@ pub fn start_grab(
                 combo_paste_active: false,
                 paste_pending: false,
             }),
+            tap_port: std::sync::atomic::AtomicUsize::new(0),
         });
-        let ctx_ptr = Box::into_raw(ctx) as *mut std::ffi::c_void;
+        let ctx_ptr = Box::into_raw(ctx);
 
         let mask = cg_raw::event_mask(&[
             cg_raw::K_CG_EVENT_KEY_DOWN,
@@ -894,24 +949,22 @@ pub fn start_grab(
         ]);
 
         unsafe {
-            eprintln!("[openbolo] Creating CGEventTap with mask {:#x}", mask);
-
             let tap = cg_raw::CGEventTapCreate(
                 cg_raw::K_CG_HID_EVENT_TAP,
                 cg_raw::K_CG_HEAD_INSERT_EVENT_TAP,
                 cg_raw::K_CG_EVENT_TAP_OPTION_DEFAULT,
                 mask,
                 macos_tap_callback,
-                ctx_ptr,
+                ctx_ptr as *mut std::ffi::c_void,
             );
 
             if tap.is_null() {
-                eprintln!("[openbolo] CGEventTapCreate FAILED — grant Accessibility permission.");
+                eprintln!("[shortcuts] CGEventTapCreate FAILED — grant Accessibility permission.");
+                let _ = Box::from_raw(ctx_ptr);
                 return;
             }
-            eprintln!("[openbolo] CGEventTap created successfully.");
 
-            cg_raw::CGEventTapEnable(tap, true);
+            (*ctx_ptr).tap_port.store(tap as usize, Ordering::SeqCst);
 
             let source = cg_raw::CFMachPortCreateRunLoopSource(
                 cg_raw::kCFAllocatorDefault,
@@ -919,15 +972,15 @@ pub fn start_grab(
                 0,
             );
             if source.is_null() {
-                eprintln!("[openbolo] CFMachPortCreateRunLoopSource FAILED.");
+                eprintln!("[shortcuts] CFMachPortCreateRunLoopSource FAILED.");
+                let _ = Box::from_raw(ctx_ptr);
                 return;
             }
 
             let rl = cg_raw::CFRunLoopGetCurrent();
             cg_raw::CFRunLoopAddSource(rl, source, cg_raw::kCFRunLoopCommonModes);
-            eprintln!("[openbolo] CGEventTap added to run loop, starting...");
+            cg_raw::CGEventTapEnable(tap, true);
 
-            // Watchdog: re-enable tap every 2s in case macOS disabled it
             let tap_usize = tap as usize;
             std::thread::spawn(move || loop {
                 std::thread::sleep(std::time::Duration::from_secs(2));
