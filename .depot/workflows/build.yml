@@ -57,16 +57,16 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - platform: macos-latest
+          - platform: depot-macos-latest
             target: aarch64-apple-darwin
             label: mac-arm64
-          - platform: macos-latest
+          - platform: depot-macos-latest
             target: x86_64-apple-darwin
             label: mac-x64
-          - platform: windows-latest
+          - platform: depot-windows-latest
             target: x86_64-pc-windows-msvc
             label: win-x64
-          - platform: ubuntu-22.04
+          - platform: depot-ubuntu-22.04
             target: x86_64-unknown-linux-gnu
             label: linux-x64
     runs-on: ${{ matrix.platform }}
@@ -80,10 +80,15 @@ jobs:
         with:
           targets: ${{ matrix.target }}
       - name: Install dependencies (Ubuntu)
-        if: startsWith(matrix.platform, 'ubuntu')
+        if: contains(matrix.platform, 'ubuntu')
         run: |
           sudo apt-get update
           sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf libasound2-dev
+      - name: Install LLVM (Windows)
+        if: contains(matrix.platform, 'windows')
+        uses: KyleMayes/install-llvm-action@v2
+        with:
+          version: "17"
       - name: Sync version from package.json
         shell: python
         run: |

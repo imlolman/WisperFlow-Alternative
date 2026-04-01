@@ -33,8 +33,15 @@ arboard = "3"
 cocoa = "0.26"
 objc = "0.2"
 
-[target.'cfg(not(target_os = "macos"))'.dependencies]
-rdev = { git = "https://github.com/Narsil/rdev.git", rev = "c77b4e5456301cfa7f2226020f2a58f2f8d77c5d", features = ["unstable_grab"] }
+[target.'cfg(target_os = "windows")'.dependencies.rdev]
+git = "https://github.com/Narsil/rdev.git"
+rev = "c77b4e5456301cfa7f2226020f2a58f2f8d77c5d"
+features = ["unstable_grab"]
+
+[target.'cfg(target_os = "linux")'.dependencies.rdev]
+git = "https://github.com/Narsil/rdev.git"
+rev = "c77b4e5456301cfa7f2226020f2a58f2f8d77c5d"
+features = ["unstable_grab", "x11"]
 
 [target.'cfg(target_os = "windows")'.dependencies]
 winreg = "0.52"
