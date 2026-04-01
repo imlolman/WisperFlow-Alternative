@@ -1,0 +1,25 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --background: #070b10;
+  --foreground: #fafafa;
+}
+
+html {
+  color-scheme: dark;
+}
+
+body {
+  color: var(--foreground);
+  background: var(--background);
+  font-family: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+}
+
+/* FAQ <details> marker hidden via Tailwind on summary; keep focus visible */
+details summary:focus-visible {
+  outline: 2px solid rgb(56 189 248 / 0.55);
+  outline-offset: 2px;
+  border-radius: 1rem;
+}
