@@ -1,36 +1,26 @@
 "use client";
 
-import { useState } from "react";
-import { latestDownloadUrl, releaseAssets, releasesUrl } from "@/lib/site";
-import { MAC_QUARANTINE_CMD } from "@/lib/quarantine";
+import { useCallback, useRef, useState } from "react";
+import { latestDownloadUrl, releaseAssets } from "@/lib/site";
 
 const macArm64Href = latestDownloadUrl(releaseAssets.macArm64Dmg);
 const macX64Href = latestDownloadUrl(releaseAssets.macX64Dmg);
 const windowsHref = latestDownloadUrl(releaseAssets.windowsSetupExe);
 const linuxHref = latestDownloadUrl(releaseAssets.linuxAppImage);
 
-export function HeroDownloads() {
-  const [macSelected, setMacSelected] = useState(false);
+const btnBase =
+  "inline-flex w-full min-w-[200px] items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/[0.06] px-6 py-3.5 text-sm font-semibold text-white transition-all hover:border-white/25 hover:bg-white/[0.1] sm:w-auto";
 
+export function HeroDownloads({ onMacDownload }: { onMacDownload?: () => void }) {
   return (
-    <div className="mx-auto mt-10 flex w-full max-w-2xl flex-col items-center px-0">
+    <div className="mx-auto mt-10 flex w-full flex-col items-center px-0">
       <div className="flex w-full flex-col items-center justify-center gap-3 sm:flex-row sm:flex-wrap sm:justify-center">
-        <a
-          href={macArm64Href}
-          target="_blank"
-          rel="noopener noreferrer"
-          onClick={() => setMacSelected(true)}
-          className="inline-flex w-full min-w-[200px] items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/[0.06] px-6 py-3.5 text-sm font-semibold text-white transition-all hover:border-sky-500/45 hover:bg-white/[0.1] sm:w-auto"
-        >
-          <AppleIcon className="h-5 w-5" />
-          Download for Mac
-        </a>
+        <MacDropdown onDownload={onMacDownload} />
         <a
           href={windowsHref}
           target="_blank"
           rel="noopener noreferrer"
-          onClick={() => setMacSelected(false)}
-          className="inline-flex w-full min-w-[200px] items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/[0.06] px-6 py-3.5 text-sm font-semibold text-white transition-all hover:border-sky-500/45 hover:bg-white/[0.1] sm:w-auto"
+          className={btnBase}
         >
           <WindowsIcon className="h-5 w-5" />
           Download for Windows
@@ -39,52 +29,70 @@ export function HeroDownloads() {
           href={linuxHref}
           target="_blank"
           rel="noopener noreferrer"
-          onClick={() => setMacSelected(false)}
-          className="inline-flex w-full min-w-[200px] items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/[0.06] px-6 py-3.5 text-sm font-semibold text-white transition-all hover:border-sky-500/45 hover:bg-white/[0.1] sm:w-auto"
+          className={btnBase}
         >
           <LinuxIcon className="h-5 w-5" />
           Download for Linux
         </a>
       </div>
+    </div>
+  );
+}
 
-      <p className="mt-3 text-center text-xs text-zinc-500">
-        Mac build is Apple Silicon (arm64).{" "}
-        <a
-          className="text-sky-400/90 underline-offset-2 hover:underline"
-          href={macX64Href}
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          Intel Mac (x64) .dmg
-        </a>
-        {" · "}
-        <a
-          className="text-sky-400/90 underline-offset-2 hover:underline"
-          href={releasesUrl}
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          All releases
-        </a>
-      </p>
+function MacDropdown({ onDownload }: { onDownload?: () => void }) {
+  const [open, setOpen] = useState(false);
+  const timeout = useRef<ReturnType<typeof setTimeout>>(null);
 
-      {macSelected ? (
-        <p className="mt-4 max-w-xl text-pretty text-center text-xs leading-relaxed text-zinc-500">
-          <span className="font-medium text-zinc-400">Mac: </span>
-          If Gatekeeper says the app is damaged, run{" "}
-          <code className="rounded border border-white/10 bg-black/40 px-1.5 py-0.5 font-mono text-[11px] text-sky-200/90">
-            {MAC_QUARANTINE_CMD}
-          </code>{" "}
-          in Terminal (with OpenBolo in Applications).{" "}
-          <a className="text-sky-400/90 underline-offset-2 hover:underline" href="#mac-gatekeeper">
-            Full steps
+  const show = useCallback(() => {
+    if (timeout.current) clearTimeout(timeout.current);
+    setOpen(true);
+  }, []);
+
+  const hide = useCallback(() => {
+    timeout.current = setTimeout(() => setOpen(false), 150);
+  }, []);
+
+  return (
+    <div className="relative" onMouseEnter={show} onMouseLeave={hide}>
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className={`${btnBase} cursor-pointer`}
+      >
+        <AppleIcon className="h-5 w-5" />
+        Download for Mac
+        <svg
+          className="ml-1 h-3 w-3 opacity-60"
+          viewBox="0 0 12 12"
+          fill="currentColor"
+          aria-hidden
+        >
+          <path d="M2.5 4.5l3.5 3.5 3.5-3.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" fill="none" />
+        </svg>
+      </button>
+
+      {open && (
+        <div className="absolute left-1/2 z-50 mt-1 -translate-x-1/2 overflow-hidden rounded-xl border border-white/10 bg-zinc-900/95 shadow-xl backdrop-blur-lg">
+          <a
+            href={macArm64Href}
+            target="_blank"
+            rel="noopener noreferrer"
+            onClick={() => { setOpen(false); onDownload?.(); }}
+            className="flex w-full items-center gap-2 whitespace-nowrap px-5 py-2.5 text-sm text-zinc-200 transition-colors hover:bg-white/[0.08]"
+          >
+            Apple Silicon (arm64)
           </a>
-        </p>
-      ) : null}
-
-      <p className="mt-6 text-center text-sm text-zinc-500">
-        Native apps for macOS, Windows, and Linux. Free and open source.
-      </p>
+          <a
+            href={macX64Href}
+            target="_blank"
+            rel="noopener noreferrer"
+            onClick={() => { setOpen(false); onDownload?.(); }}
+            className="flex w-full items-center gap-2 whitespace-nowrap px-5 py-2.5 text-sm text-zinc-200 transition-colors hover:bg-white/[0.08]"
+          >
+            Intel Mac (x64)
+          </a>
+        </div>
+      )}
     </div>
   );
 }
