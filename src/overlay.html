@@ -3,6 +3,16 @@
 <head>
 <meta charset="utf-8">
 <link rel="icon" href="assets/app-icon.png" type="image/png">
+<script>if(navigator.userAgent.includes('Windows'))document.documentElement.classList.add('win');</script>
+<style>
+html.win, html.win body {
+  background: #050a12;
+}
+html.win .wrap {
+  border-radius: 0;
+  box-shadow: none;
+}
+</style>
 <style>
 * { margin: 0; padding: 0; }
 html, body {

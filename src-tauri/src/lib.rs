@@ -189,11 +189,13 @@ fn stop_recording(state: &AppState, app: &tauri::AppHandle) {
     let st = state.clone();
     let app_clone = app.clone();
     std::thread::spawn(move || {
-        // Reload context every transcription to prevent state accumulation
         {
-            let path = config::model_path().to_string_lossy().to_string();
-            if let Some(t) = st.transcriber.write().as_mut() {
-                t.reload(&path).ok();
+            let should_reload = st.transcriber.read().as_ref().map_or(false, |t| t.should_reload());
+            if should_reload {
+                let path = config::model_path().to_string_lossy().to_string();
+                if let Some(t) = st.transcriber.write().as_mut() {
+                    t.reload(&path).ok();
+                }
             }
         }
 

@@ -4,15 +4,21 @@ pub fn ensure_overlay(app: &AppHandle) {
     if app.get_webview_window("overlay").is_some() {
         return;
     }
-    let _ = WebviewWindowBuilder::new(app, "overlay", WebviewUrl::App("overlay.html".into()))
+    let mut builder = WebviewWindowBuilder::new(app, "overlay", WebviewUrl::App("overlay.html".into()))
         .title("")
         .inner_size(90.0, 26.0)
         .always_on_top(true)
         .decorations(false)
-        .transparent(true)
         .skip_taskbar(true)
         .visible(false)
-        .resizable(false)
+        .resizable(false);
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        builder = builder.transparent(true);
+    }
+
+    let _ = builder
         .icon(crate::icons::app_icon_rgba())
         .expect("overlay window icon")
         .build();

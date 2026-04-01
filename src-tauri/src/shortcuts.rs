@@ -189,10 +189,12 @@ fn button_from_rdev(btn: &Button) -> u8 {
         Button::Left => 0,
         Button::Right => 1,
         Button::Middle => 2,
+        Button::Unknown(1) => 3, // Windows XBUTTON1 (Back)
+        Button::Unknown(2) => 4, // Windows XBUTTON2 (Forward)
         Button::Unknown(3) => 3,
         Button::Unknown(4) => 4,
-        Button::Unknown(8) => 3,
-        Button::Unknown(9) => 4,
+        Button::Unknown(8) => 3, // Linux X11
+        Button::Unknown(9) => 4, // Linux X11
         _ => 255,
     }
 }
@@ -471,9 +473,9 @@ impl GrabState {
 }
 
 // ---------------------------------------------------------------------------
-// Linux
+// Linux & Windows – rdev::grab (with event suppression)
 // ---------------------------------------------------------------------------
-#[cfg(all(not(target_os = "windows"), not(target_os = "macos")))]
+#[cfg(not(target_os = "macos"))]
 pub fn start_grab(
     handle: GrabHandle,
     event_tx: tokio::sync::mpsc::UnboundedSender<ShortcutEvent>,
@@ -561,7 +563,11 @@ pub fn start_grab(
         if let Err(e) = rdev::grab(callback) {
             log::error!("[openbolo] Failed to grab input events: {:?}", e);
             eprintln!("[openbolo] Failed to grab input events: {:?}", e);
-            eprintln!("[openbolo] On Linux: Ensure you're in the 'input' group or run with appropriate permissions.");
+            if cfg!(target_os = "windows") {
+                eprintln!("[openbolo] On Windows: Run as administrator if needed.");
+            } else {
+                eprintln!("[openbolo] On Linux: Ensure you're in the 'input' group or run with appropriate permissions.");
+            }
         }
     })
 }
@@ -992,88 +998,6 @@ pub fn start_grab(
     })
 }
 
-// ---------------------------------------------------------------------------
-// Windows – rdev::listen (no suppression support)
-// ---------------------------------------------------------------------------
-#[cfg(target_os = "windows")]
-pub fn start_grab(
-    handle: GrabHandle,
-    event_tx: tokio::sync::mpsc::UnboundedSender<ShortcutEvent>,
-) -> std::thread::JoinHandle<()> {
-    std::thread::spawn(move || {
-        let state = Arc::new(parking_lot::Mutex::new(GrabState {
-            event_tx,
-            pressed: HashSet::new(),
-            combo_hold_active: false,
-            combo_toggle_active: false,
-            combo_paste_active: false,
-            paste_pending: false,
-        }));
-
-        let callback_state = Arc::clone(&state);
-        let callback = move |event: Event| {
-            let mut guard = callback_state.lock();
-
-            if handle.capture_mode.load(Ordering::SeqCst) {
-                if let EventType::ButtonPress(btn) = event.event_type {
-                    let btn_code = button_from_rdev(&btn);
-                    if btn_code != 255 && btn_code != 0 {
-                        let name = button_to_name(btn_code);
-                        if let Some(tx) = handle.capture_tx.lock().take() {
-                            tx.send(name).ok();
-                        }
-                    }
-                }
-                return;
-            }
-
-            if !handle.enabled.load(Ordering::SeqCst) {
-                if let EventType::KeyRelease(key) = event.event_type {
-                    if let Some(kc) = key_from_rdev(&key) {
-                        guard.pressed.remove(&kc);
-                    }
-                }
-                return;
-            }
-
-            let config = handle.config.read().clone();
-
-            match event.event_type {
-                EventType::KeyPress(key) => {
-                    if let Some(kc) = key_from_rdev(&key) {
-                        if guard.pressed.insert(kc) {
-                            guard.process_key_press(&config, kc);
-                        }
-                    }
-                }
-                EventType::KeyRelease(key) => {
-                    if let Some(kc) = key_from_rdev(&key) {
-                        guard.pressed.remove(&kc);
-                        guard.process_key_release(&config, kc);
-                    }
-                }
-                EventType::ButtonPress(btn) => {
-                    let btn_code = button_from_rdev(&btn);
-                    if btn_code != 255 {
-                        guard.process_button_press(&config, btn_code);
-                    }
-                }
-                EventType::ButtonRelease(btn) => {
-                    let btn_code = button_from_rdev(&btn);
-                    if btn_code != 255 {
-                        guard.process_button_release(&config, btn_code);
-                    }
-                }
-                _ => {}
-            }
-        };
-
-        if let Err(e) = rdev::listen(callback) {
-            eprintln!("[openbolo] Failed to listen to input events: {:?}", e);
-            eprintln!("[openbolo] On Windows: Run as administrator if needed.");
-        }
-    })
-}
 
 // ---------------------------------------------------------------------------
 // Display helpers
