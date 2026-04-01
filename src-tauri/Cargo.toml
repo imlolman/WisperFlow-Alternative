@@ -26,7 +26,7 @@ anyhow = "1"
 log = "0.4"
 env_logger = "0.11"
 futures-util = "0.3"
-rdev = { git = "https://github.com/Narsil/rdev.git", rev = "c77b4e5456301cfa7f2226020f2a58f2f8d77c5d", features = ["unstable_grab"], default-features = false }
+rdev = { git = "https://github.com/Narsil/rdev.git", rev = "c77b4e5456301cfa7f2226020f2a58f2f8d77c5d", features = ["unstable_grab"] }
 enigo = "0.2"
 arboard = "3"
 
