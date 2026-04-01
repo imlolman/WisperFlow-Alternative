@@ -3,8 +3,12 @@ name: Build and release
 on:
   push:
     branches: [main, win]
+    paths-ignore:
+      - "docs/**"
   pull_request:
     branches: [main]
+    paths-ignore:
+      - "docs/**"
   workflow_dispatch:
     inputs:
       force_release:
