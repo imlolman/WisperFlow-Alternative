@@ -448,7 +448,6 @@ pub fn start_grab(
     event_tx: tokio::sync::mpsc::UnboundedSender<ShortcutEvent>,
 ) -> std::thread::JoinHandle<()> {
     use core_graphics::event::{CGEvent, CGEventTap, CGEventTapLocation, CGEventTapOptions, CGEventTapPlacement, CGEventType, EventField};
-    use core_graphics::event_source::CGEventSource;
     
     std::thread::spawn(move || {
         let state = Arc::new(parking_lot::Mutex::new(GrabState {
