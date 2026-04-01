@@ -14,6 +14,23 @@
   .dots { display: flex; gap: 6px; }
   .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--text2); transition: background 0.2s; }
   .dot.on { background: var(--accent); }
+  .perm-card { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px; margin-bottom: 10px; }
+  .perm-header { display: flex; align-items: center; gap: 12px; margin-bottom: 8px; }
+  .perm-icon { width: 32px; height: 32px; flex-shrink: 0; }
+  .perm-icon svg { width: 100%; height: 100%; }
+  .perm-info { flex: 1; }
+  .perm-title { font-size: 14px; font-weight: 600; margin-bottom: 2px; }
+  .perm-desc { font-size: 11px; color: var(--text2); line-height: 1.4; }
+  .perm-footer { display: flex; align-items: center; justify-content: space-between; margin-top: 10px; }
+  .perm-status { display: flex; align-items: center; gap: 6px; font-size: 12px; }
+  .status-icon { width: 16px; height: 16px; }
+  .status-granted { color: #50c878; }
+  .status-pending { color: #e8a040; }
+  .perm-action { background: transparent; border: 1px solid var(--border); color: var(--accent); border-radius: 8px; padding: 6px 16px; font-size: 12px; cursor: pointer; }
+  .perm-action:hover { border-color: var(--accent); background: var(--accent-soft); }
+  .perm-action:disabled { opacity: 0.3; cursor: default; }
+  .linux-instructions { background: rgba(232,160,64,0.08); border: 1px solid rgba(232,160,64,0.2); border-radius: 8px; padding: 10px 12px; margin-top: 8px; font-size: 11px; color: var(--text2); line-height: 1.5; }
+  .linux-instructions code { background: rgba(0,0,0,0.3); padding: 2px 6px; border-radius: 4px; font-family: monospace; color: var(--text); }
   .nav-btn { background: transparent; border: 1px solid var(--border); color: var(--accent); border-radius: 8px; padding: 6px 18px; font-size: 13px; cursor: pointer; }
   .nav-btn:hover { border-color: var(--accent); }
   .nav-btn.primary { background: var(--accent); color: #030810; border-color: var(--accent); font-weight: 600; }
@@ -57,24 +74,37 @@
 <body>
 <div class="wizard">
   <div class="steps">
-    <!-- Step 1: Mic -->
+    <!-- Step 1: Welcome -->
     <div class="step active" id="step1">
       <div class="welcome-icon"><img src="assets/app-icon.png" width="64" height="64" alt=""></div>
       <h1>Welcome to OpenBolo</h1>
-      <div class="welcome-text">Select your microphone to get started</div>
+      <div class="welcome-text">Your private, on-device speech-to-text assistant.<br>Let's get you set up in a few quick steps.</div>
+    </div>
+
+    <!-- Step 2: Permissions -->
+    <div class="step" id="step2">
+      <h1>Grant Permissions</h1>
+      <div class="welcome-text">OpenBolo needs these permissions to work properly</div>
+      <div id="permissionCards"></div>
+    </div>
+
+    <!-- Step 3: Mic + Model -->
+    <div class="step" id="step3">
+      <h1>Select Microphone</h1>
+      <div class="welcome-text">Choose the microphone you'll use for dictation</div>
       <div class="card" id="micList"></div>
       <div id="levelWrap">
         <div class="level-bar"><div class="level-fill" id="levelFill"></div></div>
       </div>
-      <div id="permStatus"></div>
       <div id="dlProgress">
         <div class="dl-text" id="dlText">Downloading speech model...</div>
         <div class="level-bar"><div class="level-fill" id="dlFill"></div></div>
       </div>
     </div>
 
-    <!-- Step 2: Shortcuts -->
-    <div class="step" id="step2">
+    <!-- Step 4: Shortcuts -->
+    <div class="step" id="step4">
+      <h1>Configure Shortcuts</h1>
       <div class="section-title">Hold Shortcut</div>
       <div class="card">
         <div class="label">Press &amp; hold to record, release to stop</div>
@@ -93,8 +123,8 @@
       </div>
     </div>
 
-    <!-- Step 3: Done -->
-    <div class="step" id="step3">
+    <!-- Step 5: Done -->
+    <div class="step" id="step5">
       <div class="done-icon"><img src="assets/app-icon.png" width="72" height="72" alt=""></div>
       <div class="done-text">You're all set!</div>
       <div class="done-sub" id="doneSubtext">OpenBolo runs in your menu bar.<br>Use your shortcuts to start dictating.</div>
@@ -107,6 +137,8 @@
       <div class="dot on" id="d0"></div>
       <div class="dot" id="d1"></div>
       <div class="dot" id="d2"></div>
+      <div class="dot" id="d3"></div>
+      <div class="dot" id="d4"></div>
     </div>
     <button class="nav-btn primary" id="nextBtn" onclick="next()">Continue</button>
   </div>

@@ -55,19 +55,19 @@ pub struct HistoryEntry {
 pub fn config_path() -> PathBuf {
     dirs::home_dir()
         .expect("no home dir")
-        .join(".wisper_config.json")
+        .join(".openbolo_config.json")
 }
 
 pub fn history_path() -> PathBuf {
     dirs::home_dir()
         .expect("no home dir")
-        .join(".wisper_history.json")
+        .join(".openbolo_history.json")
 }
 
 pub fn model_dir() -> PathBuf {
     dirs::data_dir()
         .expect("no data dir")
-        .join("com.openflow.app")
+        .join("com.openbolo.app")
         .join("models")
 }
 
@@ -80,39 +80,10 @@ pub fn load_config() -> Config {
     if !path.exists() {
         return Config::default();
     }
-    match std::fs::read_to_string(&path) {
-        Ok(data) => {
-            let mut val: serde_json::Value =
-                serde_json::from_str(&data).unwrap_or_else(|_| serde_json::json!({}));
-
-            // Migrate legacy keys
-            if let Some(obj) = val.as_object_mut() {
-                if obj.contains_key("shortcut") && obj.contains_key("shortcut_mode") {
-                    let sc = obj
-                        .get("shortcut")
-                        .and_then(|v| v.as_str())
-                        .unwrap_or("")
-                        .to_string();
-                    let mode = obj
-                        .get("shortcut_mode")
-                        .and_then(|v| v.as_str())
-                        .unwrap_or("hold")
-                        .to_string();
-                    obj.remove("shortcut");
-                    obj.remove("shortcut_mode");
-                    if mode == "toggle" {
-                        obj.entry("shortcut_toggle")
-                            .or_insert(serde_json::Value::String(sc));
-                    } else {
-                        obj.entry("shortcut_hold")
-                            .or_insert(serde_json::Value::String(sc));
-                    }
-                }
-            }
-            serde_json::from_value(val).unwrap_or_default()
-        }
-        Err(_) => Config::default(),
-    }
+    std::fs::read_to_string(&path)
+        .ok()
+        .and_then(|data| serde_json::from_str(&data).ok())
+        .unwrap_or_default()
 }
 
 pub fn save_config(cfg: &Config) -> anyhow::Result<()> {

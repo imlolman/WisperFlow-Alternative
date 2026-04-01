@@ -8,6 +8,8 @@ let toggleShortcut = 'key:Alt_R';
 let capturing = null;
 let modelReady = false;
 let platform = 'macos';
+let permissionPollInterval = null;
+let allPermissionsGranted = false;
 
 const CODE_MAP = {
   AltLeft:'key:Alt_L', AltRight:'key:Alt_R',
@@ -52,7 +54,291 @@ function keyDisp(code) {
 
 async function init() {
   platform = await invoke('get_platform');
-  
+  updatePlatformLabels();
+}
+
+function showStep(n) {
+  document.querySelectorAll('.step').forEach(s => s.classList.remove('active'));
+  document.getElementById('step' + (n + 1)).classList.add('active');
+  for (let i = 0; i < 5; i++) {
+    document.getElementById('d' + i).classList.toggle('on', i === n);
+  }
+  document.getElementById('backBtn').style.visibility = n === 0 ? 'hidden' : 'visible';
+  if (n === 4) {
+    document.getElementById('nextBtn').textContent = 'Start App';
+  } else {
+    document.getElementById('nextBtn').textContent = 'Continue';
+  }
+
+  // Handle step-specific logic
+  if (n === 1) {
+    renderPermissionCards();
+    startPermissionPolling();
+  } else {
+    stopPermissionPolling();
+  }
+
+  if (n === 2) {
+    loadMicrophones();
+  }
+}
+
+async function next() {
+  if (step === 0) {
+    step = 1;
+    showStep(1);
+  } else if (step === 1) {
+    if (!allPermissionsGranted) return;
+    step = 2;
+    showStep(2);
+  } else if (step === 2) {
+    if (!modelReady) return;
+    step = 3;
+    showStep(3);
+  } else if (step === 3) {
+    step = 4;
+    showStep(4);
+  } else if (step === 4) {
+    invoke('finish_onboarding', { mic: selectedMic, hold: holdShortcut, toggle: toggleShortcut });
+  }
+}
+
+function back() {
+  if (step > 0) {
+    step--;
+    showStep(step);
+  }
+}
+
+// ===== PERMISSIONS STEP =====
+
+function renderPermissionCards() {
+  const container = document.getElementById('permissionCards');
+  container.innerHTML = '';
+
+  if (platform === 'macos') {
+    container.innerHTML = `
+      <div class="perm-card" id="micPermCard">
+        <div class="perm-header">
+          <div class="perm-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
+              <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+              <line x1="12" y1="19" x2="12" y2="23"/>
+              <line x1="8" y1="23" x2="16" y2="23"/>
+            </svg>
+          </div>
+          <div class="perm-info">
+            <div class="perm-title">Microphone</div>
+            <div class="perm-desc">Required to capture your voice for transcription</div>
+          </div>
+        </div>
+        <div class="perm-footer">
+          <div class="perm-status" id="micStatus">
+            <span class="status-icon status-pending">⏳</span>
+            <span>Checking...</span>
+          </div>
+          <button class="perm-action" id="micGrantBtn" onclick="requestMicPermission()">Grant Access</button>
+        </div>
+      </div>
+      <div class="perm-card" id="accessibilityPermCard">
+        <div class="perm-header">
+          <div class="perm-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="12" cy="12" r="10"/>
+              <path d="M8 14s1.5 2 4 2 4-2 4-2"/>
+              <line x1="9" y1="9" x2="9.01" y2="9"/>
+              <line x1="15" y1="9" x2="15.01" y2="9"/>
+            </svg>
+          </div>
+          <div class="perm-info">
+            <div class="perm-title">Accessibility</div>
+            <div class="perm-desc">Required for global shortcuts and typing into other apps</div>
+          </div>
+        </div>
+        <div class="perm-footer">
+          <div class="perm-status" id="accessibilityStatus">
+            <span class="status-icon status-pending">⏳</span>
+            <span>Checking...</span>
+          </div>
+          <button class="perm-action" id="accessibilityGrantBtn" onclick="openAccessibilitySettings()">Open Settings</button>
+        </div>
+      </div>
+    `;
+  } else if (platform === 'windows') {
+    container.innerHTML = `
+      <div class="perm-card" id="micPermCard">
+        <div class="perm-header">
+          <div class="perm-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
+              <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+              <line x1="12" y1="19" x2="12" y2="23"/>
+              <line x1="8" y1="23" x2="16" y2="23"/>
+            </svg>
+          </div>
+          <div class="perm-info">
+            <div class="perm-title">Microphone</div>
+            <div class="perm-desc">Required to capture your voice for transcription</div>
+          </div>
+        </div>
+        <div class="perm-footer">
+          <div class="perm-status" id="micStatus">
+            <span class="status-icon status-pending">⏳</span>
+            <span>Checking...</span>
+          </div>
+          <button class="perm-action" id="micGrantBtn" onclick="requestMicPermission()">Grant Access</button>
+        </div>
+      </div>
+    `;
+  } else {
+    container.innerHTML = `
+      <div class="perm-card" id="micPermCard">
+        <div class="perm-header">
+          <div class="perm-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
+              <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+              <line x1="12" y1="19" x2="12" y2="23"/>
+              <line x1="8" y1="23" x2="16" y2="23"/>
+            </svg>
+          </div>
+          <div class="perm-info">
+            <div class="perm-title">Microphone</div>
+            <div class="perm-desc">Required to capture your voice for transcription</div>
+          </div>
+        </div>
+        <div class="perm-footer">
+          <div class="perm-status" id="micStatus">
+            <span class="status-icon status-pending">⏳</span>
+            <span>Checking...</span>
+          </div>
+          <button class="perm-action" id="micGrantBtn" onclick="requestMicPermission()">Grant Access</button>
+        </div>
+      </div>
+      <div class="perm-card" id="inputPermCard">
+        <div class="perm-header">
+          <div class="perm-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <rect x="2" y="4" width="20" height="16" rx="2"/>
+              <path d="M6 8h.01M10 8h.01M14 8h.01M18 8h.01M8 12h8"/>
+            </svg>
+          </div>
+          <div class="perm-info">
+            <div class="perm-title">Input Access</div>
+            <div class="perm-desc">Required for global shortcuts to work</div>
+          </div>
+        </div>
+        <div class="perm-footer">
+          <div class="perm-status" id="inputStatus">
+            <span class="status-icon status-pending">⏳</span>
+            <span>Checking...</span>
+          </div>
+        </div>
+        <div class="linux-instructions">
+          Run this command in terminal, then restart the app:<br>
+          <code>sudo usermod -a -G input $USER</code>
+        </div>
+      </div>
+    `;
+  }
+}
+
+async function checkPermissions() {
+  try {
+    const status = await invoke('check_permissions');
+    
+    // Update microphone status
+    const micStatus = document.getElementById('micStatus');
+    const micGrantBtn = document.getElementById('micGrantBtn');
+    if (status.microphone) {
+      micStatus.innerHTML = '<span class="status-icon status-granted">✓</span><span>Granted</span>';
+      micStatus.className = 'perm-status status-granted';
+      if (micGrantBtn) micGrantBtn.disabled = true;
+    } else {
+      micStatus.innerHTML = '<span class="status-icon status-pending">⏳</span><span>Pending</span>';
+      micStatus.className = 'perm-status status-pending';
+      if (micGrantBtn) micGrantBtn.disabled = false;
+    }
+
+    // Update accessibility status (macOS only)
+    if (platform === 'macos') {
+      const accessibilityStatus = document.getElementById('accessibilityStatus');
+      const accessibilityGrantBtn = document.getElementById('accessibilityGrantBtn');
+      if (status.accessibility) {
+        accessibilityStatus.innerHTML = '<span class="status-icon status-granted">✓</span><span>Granted</span>';
+        accessibilityStatus.className = 'perm-status status-granted';
+        if (accessibilityGrantBtn) accessibilityGrantBtn.disabled = true;
+      } else {
+        accessibilityStatus.innerHTML = '<span class="status-icon status-pending">⏳</span><span>Pending</span>';
+        accessibilityStatus.className = 'perm-status status-pending';
+        if (accessibilityGrantBtn) accessibilityGrantBtn.disabled = false;
+      }
+    }
+
+    // Update input access status (Linux only)
+    if (platform === 'linux') {
+      const inputStatus = document.getElementById('inputStatus');
+      if (status.input_access) {
+        inputStatus.innerHTML = '<span class="status-icon status-granted">✓</span><span>Granted</span>';
+        inputStatus.className = 'perm-status status-granted';
+      } else {
+        inputStatus.innerHTML = '<span class="status-icon status-pending">⏳</span><span>Pending</span>';
+        inputStatus.className = 'perm-status status-pending';
+      }
+    }
+
+    // Check if all required permissions are granted
+    if (platform === 'macos') {
+      allPermissionsGranted = status.microphone && status.accessibility;
+    } else if (platform === 'linux') {
+      allPermissionsGranted = status.microphone && status.input_access;
+    } else {
+      allPermissionsGranted = status.microphone;
+    }
+
+    // Enable/disable continue button
+    const nextBtn = document.getElementById('nextBtn');
+    if (step === 1) {
+      nextBtn.disabled = !allPermissionsGranted;
+    }
+  } catch (e) {
+    console.error('Failed to check permissions:', e);
+  }
+}
+
+function startPermissionPolling() {
+  checkPermissions();
+  permissionPollInterval = setInterval(checkPermissions, 2000);
+}
+
+function stopPermissionPolling() {
+  if (permissionPollInterval) {
+    clearInterval(permissionPollInterval);
+    permissionPollInterval = null;
+  }
+}
+
+async function requestMicPermission() {
+  try {
+    await invoke('request_mic_permission');
+    setTimeout(checkPermissions, 500);
+  } catch (e) {
+    console.error('Failed to request mic permission:', e);
+  }
+}
+
+async function openAccessibilitySettings() {
+  try {
+    await invoke('open_accessibility_settings');
+  } catch (e) {
+    console.error('Failed to open accessibility settings:', e);
+  }
+}
+
+// ===== MIC + MODEL STEP =====
+
+async function loadMicrophones() {
   const mics = await invoke('get_microphones');
   const list = document.getElementById('micList');
   list.innerHTML = '';
@@ -70,14 +356,7 @@ async function init() {
     list.appendChild(div);
   });
 
-  invoke('request_mic_permission');
-  setTimeout(() => {
-    document.getElementById('permStatus').innerHTML = '<span class="perm-badge perm-ok">Microphone access granted</span>';
-    testMic();
-  }, 1500);
-
   checkAndDownloadModel();
-  updatePlatformLabels();
 }
 
 async function testMic() {
@@ -120,39 +399,7 @@ async function checkAndDownloadModel() {
   }
 }
 
-function showStep(n) {
-  document.querySelectorAll('.step').forEach(s => s.classList.remove('active'));
-  document.getElementById('step' + (n + 1)).classList.add('active');
-  for (let i = 0; i < 3; i++) {
-    document.getElementById('d' + i).classList.toggle('on', i === n);
-  }
-  document.getElementById('backBtn').style.visibility = n === 0 ? 'hidden' : 'visible';
-  if (n === 2) {
-    document.getElementById('nextBtn').textContent = 'Start App';
-  } else {
-    document.getElementById('nextBtn').textContent = 'Continue';
-  }
-}
-
-function next() {
-  if (step === 0) {
-    if (!modelReady) return;
-    step = 1;
-    showStep(1);
-  } else if (step === 1) {
-    step = 2;
-    showStep(2);
-  } else if (step === 2) {
-    invoke('finish_onboarding', { mic: selectedMic, hold: holdShortcut, toggle: toggleShortcut });
-  }
-}
-
-function back() {
-  if (step > 0) {
-    step--;
-    showStep(step);
-  }
-}
+// ===== SHORTCUTS STEP =====
 
 function capture(which) {
   if (capturing) return;
@@ -243,8 +490,10 @@ function capture(which) {
 
 function updatePlatformLabels() {
   if (platform !== 'macos') {
-    document.getElementById('toggleDisp').textContent = 'Right Alt';
-    document.getElementById('doneSubtext').innerHTML = 'OpenBolo runs in your system tray.<br>Use your shortcuts to start dictating.';
+    const toggleDisp = document.getElementById('toggleDisp');
+    const doneSubtext = document.getElementById('doneSubtext');
+    if (toggleDisp) toggleDisp.textContent = 'Right Alt';
+    if (doneSubtext) doneSubtext.innerHTML = 'OpenBolo runs in your system tray.<br>Use your shortcuts to start dictating.';
   }
 }
 

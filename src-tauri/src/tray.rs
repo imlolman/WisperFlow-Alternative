@@ -9,7 +9,7 @@ pub fn setup(app: &tauri::App) -> anyhow::Result<()> {
     let quit_item = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
     let menu = Menu::with_items(app, &[&settings_item, &quit_item])?;
 
-    let icon = crate::icons::app_icon_rgba();
+    let icon = crate::icons::tray_icon_rgba();
 
     TrayIconBuilder::with_id("main")
         .icon(icon)
