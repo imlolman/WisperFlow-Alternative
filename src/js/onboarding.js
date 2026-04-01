@@ -19,6 +19,10 @@ const CODE_MAP = {
   Space:'key:space', Enter:'key:Return', Escape:'key:Escape',
   Backspace:'key:BackSpace', Tab:'key:Tab', CapsLock:'key:Caps_Lock',
   Delete:'key:Delete',
+  PageDown:'key:Page_Down', PageUp:'key:Page_Up',
+  Home:'key:Home', End:'key:End',
+  ArrowUp:'key:Up', ArrowDown:'key:Down',
+  ArrowLeft:'key:Left', ArrowRight:'key:Right',
 };
 for (let i = 1; i <= 12; i++) CODE_MAP['F' + i] = 'key:F' + i;
 for (let i = 0; i <= 9; i++) CODE_MAP['Digit' + i] = 'key:' + i;

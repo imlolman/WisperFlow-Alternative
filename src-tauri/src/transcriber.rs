@@ -112,11 +112,24 @@ fn is_hallucination(text: &str) -> bool {
         "(music playing)", "[music]", "[music playing]", "(silence)",
         "(blank audio)", "(no audio)", "(applause)", "(laughing)",
         "(laughter)", "thank you for watching", "thanks for watching",
+        "thank you.", "thank you", "thanks.",
         "subscribe", "like and subscribe", "please subscribe",
         "see you in the next", "you",
     ];
     for p in &exact {
         if t == *p {
+            return true;
+        }
+    }
+
+    // Initial prompt echoed back by whisper on silence
+    let prompt_hallucinations = [
+        "this is a voice dictation for typing text.",
+        "this is a voice dictation for typing text",
+        "voice dictation for typing text",
+    ];
+    for p in &prompt_hallucinations {
+        if t == *p || t.contains(*p) {
             return true;
         }
     }

@@ -1,0 +1,192 @@
+# Depot CI Migration
+# Source: .github/workflows/build.yml
+#
+# Changes made:
+# - Changed GitHub runs-on labels to their Depot equivalents
+
+name: Build and release
+on:
+  push:
+    branches: [main, win]
+    paths-ignore:
+      - "docs/**"
+  pull_request:
+    branches: [main]
+    paths-ignore:
+      - "docs/**"
+  workflow_dispatch:
+    inputs:
+      force_release:
+        description: "Create GitHub release from current package.json (main only)"
+        type: boolean
+        default: false
+permissions:
+  contents: read
+jobs:
+  version-check:
+    runs-on: depot-ubuntu-latest # was: ubuntu-latest. Mapped standard GitHub runner to Depot equivalent.
+    outputs:
+      release: ${{ steps.check.outputs.release }}
+      version: ${{ steps.check.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+      - name: Determine version and whether to release
+        id: check
+        shell: bash
+        run: |
+          VERSION=$(jq -r .version package.json)
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          RELEASE=false
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && \
+             [ "${{ github.ref }}" = "refs/heads/main" ] && \
+             [ "${{ github.event.inputs.force_release }}" = "true" ]; then
+            RELEASE=true
+          elif [ "${{ github.event_name }}" = "push" ] && \
+               [ "${{ github.ref }}" = "refs/heads/main" ]; then
+            OLD=$(git show HEAD~1:package.json 2>/dev/null | jq -r .version || echo "")
+            if [ -n "$OLD" ] && [ "$VERSION" != "$OLD" ]; then
+              RELEASE=true
+            fi
+          fi
+          echo "release=$RELEASE" >> "$GITHUB_OUTPUT"
+  build:
+    needs: version-check
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: macos-latest
+            target: aarch64-apple-darwin
+            label: mac-arm64
+          - platform: macos-latest
+            target: x86_64-apple-darwin
+            label: mac-x64
+          - platform: windows-latest
+            target: x86_64-pc-windows-msvc
+            label: win-x64
+          - platform: ubuntu-22.04
+            target: x86_64-unknown-linux-gnu
+            label: linux-x64
+    runs-on: ${{ matrix.platform }}
+    name: Build (${{ matrix.label }})
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+      - name: Install dependencies (Ubuntu)
+        if: startsWith(matrix.platform, 'ubuntu')
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf libasound2-dev
+      - name: Sync version from package.json
+        shell: python
+        run: |
+          import json, pathlib, re
+          v = json.loads(pathlib.Path("package.json").read_text())["version"]
+          p = pathlib.Path("src-tauri/tauri.conf.json")
+          data = json.loads(p.read_text())
+          data["version"] = v
+          p.write_text(json.dumps(data, indent=2) + "\n")
+          cargo_path = pathlib.Path("src-tauri/Cargo.toml")
+          text = cargo_path.read_text()
+          text = re.sub(
+              r'^version = "[^"]*"',
+              f'version = "{v}"',
+              text,
+              count=1,
+              flags=re.MULTILINE,
+          )
+          cargo_path.write_text(text)
+      - name: Install npm dependencies
+        run: npm install
+      - name: Build Tauri app
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          args: --target ${{ matrix.target }}
+      - name: Stage release asset (stable filename)
+        if: needs.version-check.outputs.release == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p staging
+          T="${{ matrix.target }}"
+          L="${{ matrix.label }}"
+          case "$L" in
+            mac-arm64)
+              shopt -s nullglob
+              files=(src-tauri/target/"$T"/release/bundle/dmg/*.dmg)
+              if [ ${#files[@]} -eq 0 ]; then echo "No DMG"; exit 1; fi
+              cp "${files[0]}" staging/OpenBolo-mac-arm64.dmg
+              ;;
+            mac-x64)
+              shopt -s nullglob
+              files=(src-tauri/target/"$T"/release/bundle/dmg/*.dmg)
+              if [ ${#files[@]} -eq 0 ]; then echo "No DMG"; exit 1; fi
+              cp "${files[0]}" staging/OpenBolo-mac-x64.dmg
+              ;;
+            win-x64)
+              shopt -s nullglob
+              files=(src-tauri/target/"$T"/release/bundle/nsis/*.exe)
+              if [ ${#files[@]} -eq 0 ]; then echo "No NSIS exe"; exit 1; fi
+              cp "${files[0]}" staging/OpenBolo-win-x64-setup.exe
+              ;;
+            linux-x64)
+              shopt -s nullglob
+              ai=(src-tauri/target/"$T"/release/bundle/appimage/*.AppImage)
+              if [ ${#ai[@]} -eq 0 ]; then echo "No AppImage"; exit 1; fi
+              cp "${ai[0]}" staging/OpenBolo-linux-x64.AppImage
+              ;;
+            *)
+              echo "Unknown label $L"; exit 1
+              ;;
+          esac
+      - name: Upload CI artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: OpenBolo-${{ matrix.label }}
+          path: |
+            src-tauri/target/${{ matrix.target }}/release/bundle/dmg/*.dmg
+            src-tauri/target/${{ matrix.target }}/release/bundle/macos/*.app
+            src-tauri/target/${{ matrix.target }}/release/bundle/nsis/*.exe
+            src-tauri/target/${{ matrix.target }}/release/bundle/msi/*.msi
+            src-tauri/target/${{ matrix.target }}/release/bundle/deb/*.deb
+            src-tauri/target/${{ matrix.target }}/release/bundle/appimage/*.AppImage
+          if-no-files-found: warn
+      - name: Upload release asset
+        if: needs.version-check.outputs.release == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-asset-${{ matrix.label }}
+          path: staging/*
+          if-no-files-found: error
+  release:
+    needs: [version-check, build]
+    if: needs.version-check.outputs.release == 'true' && needs.build.result == 'success'
+    runs-on: depot-ubuntu-latest # was: ubuntu-latest. Mapped standard GitHub runner to Depot equivalent.
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download staged release assets
+        uses: actions/download-artifact@v4
+        with:
+          pattern: release-asset-*
+          path: release-assets
+          merge-multiple: true
+      - name: Publish GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ needs.version-check.outputs.version }}
+          name: OpenBolo v${{ needs.version-check.outputs.version }}
+          generate_release_notes: true
+          files: release-assets/*
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
